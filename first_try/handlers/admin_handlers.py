@@ -1,8 +1,11 @@
-from aiogram import Router, types
-from aiogram.types import Message
+import os
+from aiogram import Router, types, Dispatcher
+from aiogram.types import Message, InputFile
 from aiogram.filters import Command
-from app.database.requests import get_orders_summary, get_user_orders_summary, set_discount, update_prices, get_prices
-from app.config import load_config
+from database.requests import (
+    get_orders_summary, get_user_orders_summary, set_discount, update_prices, get_prices, get_all_files, clear_downloads
+)
+from config import load_config
 
 router = Router()
 config = load_config()
@@ -61,3 +64,24 @@ async def set_user_discount(message: Message):
     discount = float(discount)
     await set_discount(username, discount)
     await message.answer(f"Скидка {discount:.2f} установлена для пользователя {username}")
+
+@router.message(Command("get_all_files"))
+async def get_all_files_command(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+
+    files = get_all_files()
+    for filepath in files:
+        document_file = InputFile(filepath)
+        await message.answer_document(document_file)
+
+@router.message(Command("clear_downloads"))
+async def clear_downloads_command(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+
+    clear_downloads()
+    await message.answer("Папка 'downloads' очищена.")
+
+def register_admin_handlers(dp: Dispatcher):
+    dp.include_router(router)

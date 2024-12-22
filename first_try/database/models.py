@@ -24,6 +24,13 @@ class Price(Base):
     name = Column(String, unique=True)
     value = Column(Float)
 
+class User(Base):
+    __tablename__ = 'users'
+    user_id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, unique=True)
+    first_name = Column(String)
+    last_name = Column(String)
+
 async def async_main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

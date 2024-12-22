@@ -5,12 +5,12 @@ from aiogram.types import Message, ContentType, InputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.dispatcher import Dispatcher
+from aiogram import Dispatcher
 import logging
 
 import keyboards as kb
 from config import load_config
-from database.requests import save_order, get_prices
+from database.requests import save_order, get_prices, save_user
 
 config = load_config()
 router = Router()
@@ -27,6 +27,20 @@ class OrderProcess(StatesGroup):
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
+    # Сохраняем данные пользователя в базу данных
+    user_data = {
+        'user_id': message.from_user.id,
+        'username': message.from_user.username,
+        'first_name': message.from_user.first_name,
+        'last_name': message.from_user.last_name
+    }
+    await save_user(user_data)
+
+    # Отправляем уведомление администратору
+    admin_chat_id = config['ADMIN_CHAT_ID']
+    await message.bot.send_message(admin_chat_id,
+                                   f"Новый пользователь @{message.from_user.username} ({message.from_user.id}) начал использовать бота.")
+
     await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа.", reply_markup=kb.main)
 
 
