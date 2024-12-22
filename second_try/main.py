@@ -3,6 +3,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.handlers import router
+from app.admin_handlers import router_2
 from app.database.models import async_main
 from app.config import load_config
 
@@ -14,7 +15,7 @@ async def main():
     bot = Bot(token=config['BOT_TOKEN'])
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
-
+    dp.include_router(router_2)
     await dp.start_polling(bot)
 
 

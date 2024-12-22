@@ -79,6 +79,15 @@ async def process_pdf(message: Message, state: FSMContext):
         elif 21 <= num_pages:
             total_cost = num_pages * prices['my_paper_21_150']
 
+        # Сохранение заказа в базе данных
+        await save_order(
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+            file_name=document.file_name,
+            num_pages=num_pages,
+            total_cost=total_cost
+        )
+
         # Отправляем файл и данные администратору
         admin_chat_id = config['ADMIN_CHAT_ID']
         caption = (f"Новый заказ от @{message.from_user.username} ({message.from_user.id})\n"
@@ -92,3 +101,6 @@ async def process_pdf(message: Message, state: FSMContext):
 
 async def process_invalid_pdf(message: Message):
     await message.answer("Пожалуйста, отправьте файл в формате PDF.")
+
+def register_main_handlers(dp: Dispatcher):
+    dp.include_router(router)
