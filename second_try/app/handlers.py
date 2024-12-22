@@ -8,6 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 import app.keyboards as kb
 from app.config import load_config
+from app.database.requests import get_prices
 
 router = Router()
 config = load_config()
@@ -57,12 +58,25 @@ async def process_pdf(message: Message, state: FSMContext):
         pdf_document = fitz.open(file_save_path)
         num_pages = pdf_document.page_count
 
+        # Получаем цены из базы данных
+        prices = await get_prices()
+
+        if num_pages == 1:
+            total_cost = 0.50
+        elif 2 <= num_pages <= 5:
+            total_cost = num_pages * prices['my_paper_2_5']
+        elif 6 <= num_pages <= 20:
+            total_cost = num_pages * prices['my_paper_6_20']
+        elif 21 <= num_pages:
+            total_cost = num_pages * prices['my_paper_21_150']
+
         # Отправляем файл и данные администратору
         admin_chat_id = config['ADMIN_CHAT_ID']
-        caption = f"Новый заказ от @{message.from_user.username} ({message.from_user.id})\nКоличество страниц: {num_pages}"
+        caption = (f"Новый заказ от @{message.from_user.username} ({message.from_user.id})\n"
+                   f"Количество страниц: {num_pages}\nСтоимость: {total_cost:.2f} рублей")
         await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
 
-        await message.answer("Ваш заказ был отправлен администратору. Спасибо!", reply_markup=kb.main)
+        await message.answer(f"Ваш заказ был отправлен администратору.\nИтоговая стоимость: {total_cost:.2f} рублей\nСпасибо за заказ", reply_markup=kb.main)
         await state.clear()
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
