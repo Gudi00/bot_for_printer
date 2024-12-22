@@ -9,7 +9,7 @@ from app.config import load_config
 
 async def main():
     config = load_config()
-    await async_main()
+    await async_main()# df
 
     bot = Bot(token=config['BOT_TOKEN'])
     dp = Dispatcher(storage=MemoryStorage())
