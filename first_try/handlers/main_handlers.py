@@ -1,11 +1,10 @@
 import os
 import fitz  # PyMuPDF
-from aiogram import Router, types
+from aiogram import Router, types, Bot, Dispatcher
 from aiogram.types import Message, ContentType, InputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram import Dispatcher
 import logging
 
 import keyboards as kb
@@ -65,7 +64,7 @@ async def process_pdf(message: Message, state: FSMContext):
         # Сохраняем загруженный файл
         file_save_path = f"downloads/{document.file_name}"
         with open(file_save_path, 'wb') as f:
-            f.write(downloaded_file.read())
+            f.write(downloaded_file.getvalue())
 
         # Открываем PDF файл и получаем количество страниц
         pdf_document = fitz.open(file_save_path)
