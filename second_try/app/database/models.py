@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, Column, Integer, Float
+from sqlalchemy import BigInteger, String, Column, Integer, Float, DateTime, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
@@ -20,6 +20,16 @@ class Price(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True)
     value = Column(Float)
+
+class Order(Base):
+    __tablename__ = 'orders'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    username = Column(String, index=True)
+    file_name = Column(String)
+    num_pages = Column(Integer)
+    total_cost = Column(Float)
+    timestamp = Column(DateTime, default=func.now())
 
 async def async_main():
     async with engine.begin() as conn:

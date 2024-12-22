@@ -15,17 +15,10 @@ async def save_order(user_id: int, username: str, file_name: str, num_pages: int
             )
             session.add(order)
             await session.commit()
-    except Exception as e:
-        logging.error(f"Error saving order: {e}")
+    except Exception:
+        print('Error in def save_order')
 
-async def get_prices():
-    try:
-        async with async_session() as session:
-            prices = await session.scalars(select(Price))
-            return {price.name: price.value for price in prices}
-    except Exception as e:
-        logging.error(f"Error getting prices: {e}")
-        return {}
+
 
 async def save_user(user_data: dict):
     try:
@@ -38,8 +31,8 @@ async def save_user(user_data: dict):
             )
             session.add(user)
             await session.commit()
-    except Exception as e:
-        logging.error(f"Error saving user: {e}")
+    except Exception:
+        print('Error in def save_user')
 
 async def get_orders_summary():
     async with async_session() as session:
