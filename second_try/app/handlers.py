@@ -22,6 +22,15 @@ class OrderProcess(StatesGroup):
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
+    # Сохраняем данные пользователя в базу данных
+    await save_user(tg_id=message.from_user.id, username=message.from_user.username,
+                    first_name=message.from_user.first_name, last_name=message.from_user.last_name)
+
+    # Отправляем уведомление администратору
+    admin_chat_id = config['ADMIN_CHAT_ID']
+    await message.bot.send_message(admin_chat_id,
+                                   f"Новый пользователь @{message.from_user.username} ({message.from_user.id}) начал использовать бота.")
+
     await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа.", reply_markup=kb.main)
 
 @router.message(lambda message: message.text == 'Создать заказ')

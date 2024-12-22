@@ -14,6 +14,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     tg_id = Column(BigInteger, unique=True, index=True)
     username = Column(String, index=True)
+    first_name = Column(String, index=True)
+    last_name = Column(String, index=True)
+    timestamp = Column(DateTime, default=func.now())
 
 class Price(Base):
     __tablename__ = 'prices'
