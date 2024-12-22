@@ -2,11 +2,13 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.handlers import router as main_router
-from app.admin_handlers import router as admin_router
-from app.database.models import async_main
-from first_try.app.config import load_config
+from handlers.main_handlers import register_main_handlers
+from handlers.admin_handlers import register_admin_handlers
+from database.models import async_main
+from config import load_config
+import logging
 
+logging.basicConfig(level=logging.INFO)
 
 async def main():
     config = load_config()
@@ -15,11 +17,16 @@ async def main():
     bot = Bot(token=config['BOT_TOKEN'])
     dp = Dispatcher(storage=MemoryStorage())
 
-    dp.include_router(main_router)
-    dp.include_router(admin_router)
+    # Регистрация роутеров
+    register_main_handlers(dp)
+    register_admin_handlers(dp)
 
-    await dp.start_polling(bot)
-
+    try:
+        await dp.start_polling(bot)
+    except Exception as e:
+        logging.error(f"Error during polling: {e}")
+    finally:
+        await bot.session.close()
 
 if __name__ == '__main__':
     try:

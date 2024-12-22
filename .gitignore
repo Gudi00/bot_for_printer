@@ -74,4 +74,4 @@ target/
 dmypy.json
 
 # Environments
-first_try/app/.env
+first_try/.env
