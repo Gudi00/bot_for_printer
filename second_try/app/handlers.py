@@ -120,7 +120,7 @@ async def process_pdf(message: Message, state: FSMContext):
                    f"Количество страниц: {num_pages}\nСтоимость: {total_cost:.2f} рублей")
         await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
 
-        await message.answer(f"Ваш заказ был отправлен администратору.\nИтоговая стоимость: {total_cost:.2f} рублей\nСпасибо за заказ", reply_markup=kb.main)
+        await message.answer(f"Итоговая стоимость: {total_cost:.2f} рублей\nСпасибо за заказ", reply_markup=kb.main)
         await state.clear()
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")

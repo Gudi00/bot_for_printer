@@ -63,11 +63,9 @@ async def update_prices_command(message: Message):
 
 @router.message(Command("get_prices"))
 async def get_prices_command(message: Message):
-    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
-        return
 
     prices = await get_prices()
-    prices_text = "\n".join([f"{name}: {value}" for name, value in prices.items()])
+    prices_text = "\n".join([f"{name}: {value} рублей" for name, value in prices.items()])
     await message.answer(f"Актуальные цены:\n{prices_text}")
 
 @router.message(Command("orders_summary"))
@@ -127,7 +125,7 @@ async def handle_reaction(message: Message):
         return
     bot_user = await bot.get_me()
     if message.reply_to_message and message.reply_to_message.from_user.id == bot_user.id:
-        order_id = int(message.reply_to_message.text)  # Предполагаем, что ID заказа находится в тексте сообщения
+        order_id = int(message.text)  # Предполагаем, что ID заказа находится в тексте сообщения
         user_id = await get_order_user_id(order_id)
         if user_id:
             await message.bot.send_document(user_id, f"Ваш заказ #{order_id} готов к выдаче!")
