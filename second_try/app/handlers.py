@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 import app.keyboards as kb
 from app.config import load_config
-from app.database.requests import save_order, get_prices, save_user
+from app.database.requests import save_order, get_prices, save_user, is_user_banned, get_discount
 
 router = Router()
 config = load_config()
@@ -17,35 +17,54 @@ config = load_config()
 if not os.path.exists('downloads'):
     os.makedirs('downloads')
 
+async def check_ban(message: Message):
+    return await is_user_banned(message.from_user.id)
+
 class OrderProcess(StatesGroup):
     waiting_for_pdf = State()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     # Сохраняем данные пользователя в базу данных
-    await save_user(tg_id=message.from_user.id, username=message.from_user.username,
-                    first_name=message.from_user.first_name, last_name=message.from_user.last_name)
+    if await save_user(tg_id=message.from_user.id, username=message.from_user.username,
+                    first_name=message.from_user.first_name, last_name=message.from_user.last_name):
 
-    # Отправляем уведомление администратору
-    admin_chat_id = config['ADMIN_CHAT_ID']
-    await message.bot.send_message(admin_chat_id,
-                                   f"Новый пользователь @{message.from_user.username} ({message.from_user.id}) начал использовать бота.")
+        # Отправляем уведомление администратору
+        admin_chat_id = config['ADMIN_CHAT_ID']
+        await message.bot.send_message(admin_chat_id,
+                                       f"Новый пользователь @{message.from_user.username} ({message.from_user.id}) начал использовать бота.")
+    if await check_ban(message):
+        await message.answer(
+            "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
 
+        return
     await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа.", reply_markup=kb.main)
 
 @router.message(lambda message: message.text == 'Создать заказ')
 async def create_order(message: Message, state: FSMContext):
+    if await check_ban(message):
+        await message.answer(
+            "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
+
+        return
     await message.answer("Пожалуйста, отправьте PDF файл.")
     await state.set_state(OrderProcess.waiting_for_pdf)
 
 @router.message(OrderProcess.waiting_for_pdf)
 async def process_message(message: Message, state: FSMContext):
+    if await check_ban(message):
+        await message.answer(
+            "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
+
+        return
     if message.content_type == ContentType.DOCUMENT:
         await process_pdf(message, state)
     else:
         await process_invalid_pdf(message)
 
 async def process_pdf(message: Message, state: FSMContext):
+    if await check_ban(message):
+        return
     document = message.document
 
     # Проверяем MIME-тип документа
@@ -69,15 +88,25 @@ async def process_pdf(message: Message, state: FSMContext):
 
         # Получаем цены из базы данных
         prices = await get_prices()
+        discount = await get_discount(message.from_user.id)
 
-        if num_pages == 1:
-            total_cost = 0.30
-        elif 2 <= num_pages <= 5:
-            total_cost = num_pages * prices['my_paper_2_5']
-        elif 6 <= num_pages <= 20:
-            total_cost = num_pages * prices['my_paper_6_20']
-        elif 21 <= num_pages:
-            total_cost = num_pages * prices['my_paper_21_150']
+        if discount == -1 and num_pages < 6:
+            total_cost = 0.00
+            #добавить счётчик, чтобы не абузили
+        else:
+            if num_pages == 1:
+                total_cost = prices['my_paper_1'] * (1-discount)
+            elif 2 <= num_pages <= 5:
+                print(num_pages)
+                print(prices['my_paper_2_5'])
+                print((1-discount))
+                total_cost = num_pages * prices['my_paper_2_5'] * (1-discount)
+            elif 6 <= num_pages <= 20:
+                total_cost = num_pages * prices['my_paper_6_20'] * (1-discount)
+            elif 21 <= num_pages:
+                total_cost = num_pages * prices['my_paper_21_150'] * (1-discount)
+
+
 
         # Сохранение заказа в базе данных
         await save_order(
@@ -90,7 +119,7 @@ async def process_pdf(message: Message, state: FSMContext):
 
         # Отправляем файл и данные администратору
         admin_chat_id = config['ADMIN_CHAT_ID']
-        caption = (f"Новый заказ от @{message.from_user.username} ({message.from_user.id})\n"
+        caption = (f"Новый заказ от @{message.from_user.username} {message.from_user.id}\n"
                    f"Количество страниц: {num_pages}\nСтоимость: {total_cost:.2f} рублей")
         await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
 
@@ -100,6 +129,8 @@ async def process_pdf(message: Message, state: FSMContext):
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
 
 async def process_invalid_pdf(message: Message):
+    if await check_ban(message):
+        return
     await message.answer("Пожалуйста, отправьте файл в формате PDF.")
 
 def register_main_handlers(dp: Dispatcher):

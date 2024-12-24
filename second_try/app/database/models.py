@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, Column, Integer, Float, DateTime, func
+from sqlalchemy import BigInteger, String, Column, Integer, Float, DateTime, func, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
@@ -16,6 +16,8 @@ class User(Base):
     username = Column(String, index=True)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
+    discount = Column(Float, default=0.0)
+    is_banned = Column(Boolean, default=False)
     timestamp = Column(DateTime, default=func.now())
 
 class Price(Base):

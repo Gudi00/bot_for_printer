@@ -12,6 +12,7 @@ async def save_user(tg_id: int, username: str, first_name: str, last_name: str):
                             first_name=first_name, last_name=last_name)
             session.add(new_user)
             await session.commit()
+            return 1
 
 async def get_prices():
     try:
@@ -21,6 +22,22 @@ async def get_prices():
     except Exception as e:
         print('Error in take price')
         return {}
+
+async def get_discount(tg_id: int):
+    try:
+        async with async_session() as session:
+            # Запрашиваем пользователя по tg_id
+            user = await session.scalar(select(User).where(User.tg_id == tg_id))
+            if user:
+                # Возвращаем значение скидки
+                return user.discount
+            else:
+                # Если пользователь не найден, возвращаем None или другое подходящее значение
+                print('User not found')
+                return None
+    except Exception as e:
+        print(f'Error in get_discount: {e}')
+        return None
 
 async def save_order(user_id: int, username: str, file_name: str, num_pages: int, total_cost: float):
     try:
@@ -55,11 +72,23 @@ async def get_user_orders_summary(user_id: int):
         return total_orders, total_income
 
 async def set_discount(username: str, discount: float):
-    async with async_session() as session:
-        user = await session.scalar(select(User).where(User.username == username))
-        if user:
-            user.discount = discount
-            await session.commit()
+    try:
+        async with async_session() as session:
+            # Находим пользователя по имени пользователя
+            user = await session.scalar(select(User).where(User.username == username))
+            if user:
+                # Обновляем значение скидки
+                stmt = update(User).where(User.username == username).values(discount=discount)
+                await session.execute(stmt)
+                await session.commit()
+                return True
+            else:
+                print(f"User with username {username} not found")
+                return False
+    except Exception as e:
+        print(f"Error in set_discount: {e}")
+        return False
+
 
 async def update_prices(prices: dict):
     async with async_session() as session:
@@ -78,3 +107,30 @@ def clear_downloads():
     files = get_all_files()
     for file_path in files:
         os.remove(file_path)
+
+# Добавляем функцию для получения user_id заказа
+async def get_order_user_id(order_id: int):
+    async with async_session() as session:
+        order = await session.scalar(select(Order).where(Order.id == order_id))
+        return order.user_id if order else None
+
+
+# Добавляем функцию для проверки, забанен ли пользователь
+async def is_user_banned(tg_id: int):
+    async with async_session() as session:
+        user = await session.scalar(select(User.is_banned).where(User.tg_id == tg_id))
+        return user if user is not None else False
+
+# Функция для бана пользователя
+async def ban_user(tg_id: int):
+    async with async_session() as session:
+        stmt = update(User).where(User.tg_id == tg_id).values(is_banned=True)
+        await session.execute(stmt)
+        await session.commit()
+
+# Функция для разбанивания пользователя
+async def unban_user(tg_id: int):
+    async with async_session() as session:
+        stmt = update(User).where(User.tg_id == tg_id).values(is_banned=False)
+        await session.execute(stmt)
+        await session.commit()

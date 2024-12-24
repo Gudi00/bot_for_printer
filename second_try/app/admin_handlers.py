@@ -1,14 +1,51 @@
 import os
-from aiogram import Router, types, Dispatcher
-from aiogram.types import Message, InputFile
+from aiogram import Router, types, Bot, Dispatcher
+from aiogram.types import Message, InputFile, CallbackQuery
 from aiogram.filters import Command
 from app.database.requests import (
-    get_orders_summary, get_user_orders_summary, set_discount, update_prices, get_prices, get_all_files, clear_downloads
+    get_orders_summary, get_user_orders_summary, set_discount,
+    update_prices, get_prices, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user
 )
 from app.config import load_config
 
 router = Router()
 config = load_config()
+bot = Bot(token=config['BOT_TOKEN'])
+
+@router.message(Command("ban"))
+async def ban_command(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /ban <user_id>")
+        return
+
+    try:
+        user_id = int(args[1])
+        await ban_user(user_id)
+        await message.answer(f"Пользователь {user_id} забанен.")
+    except Exception as e:
+        await message.answer(f"Ошибка при бане пользователя: {e}")
+
+# Обработчик команды для разбанивания пользователя
+@router.message(Command("unban"))
+async def unban_command(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /unban <user_id>")
+        return
+
+    try:
+        user_id = int(args[1])
+        await unban_user(user_id)
+        await message.answer(f"Пользователь {user_id} разбанен.")
+    except Exception as e:
+        await message.answer(f"Ошибка при разбане пользователя: {e}")
 
 @router.message(Command("update_prices"))
 async def update_prices_command(message: Message):
@@ -50,21 +87,21 @@ async def user_orders_summary(message: Message):
     total_orders, total_income = await get_user_orders_summary(user_id)
     await message.answer(f"Количество заказов пользователя {user_id}: {total_orders}\nДоход от пользователя: {total_income:.2f} копеек")
 
-# @router.message(Command("set_discount"))
-# async def set_user_discount(message: Message):
-#     if message.from_user.id != int(config['ADMIN_CHAT_ID']):
-#         return
-#
-#     args = message.text.split()
-#     if len(args) == 2:
-#         await message.answer("Использование: /set_discount <username> <discount>")
-#         return
-#
-#     username, discount = args[1], args[2]
-#
-#     discount = float(discount)
-#     await set_discount(username, discount)
-#     await message.answer(f"Скидка {discount:.2f} установлена для пользователя {username}")
+@router.message(Command("set_discount"))
+async def set_user_discount(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+
+    args = message.text.split()
+    if len(args) != 3:
+        await message.answer("Использование: /set_discount <username> <discount>")
+        return
+
+    username, discount = args[1], args[2]
+
+    discount = float(discount)
+    await set_discount(username, discount)
+    await message.answer(f"Скидка {discount:.2f} установлена для пользователя {username}")
 
 # @router.message(Command("get_all_files"))
 # async def get_all_files_command(message: Message):
@@ -83,6 +120,19 @@ async def clear_downloads_command(message: Message):
 
     clear_downloads()
     await message.answer("Папка 'downloads' очищена.")
+
+@router.message()
+async def handle_reaction(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+    bot_user = await bot.get_me()
+    if message.reply_to_message and message.reply_to_message.from_user.id == bot_user.id:
+        order_id = int(message.reply_to_message.text)  # Предполагаем, что ID заказа находится в тексте сообщения
+        user_id = await get_order_user_id(order_id)
+        if user_id:
+            await message.bot.send_document(user_id, f"Ваш заказ #{order_id} готов к выдаче!")
+
+
 
 def register_admin_handlers(dp: Dispatcher):
     dp.include_router(router)
