@@ -128,10 +128,16 @@ async def handle_reaction(message: Message):
         order_id = int(message.text)  # Предполагаем, что ID заказа находится в тексте сообщения
         user_id = await get_order_user_id(order_id)
         if user_id:
-            if await update_order_status(order_id, 'completed'):
-                await message.bot.send_message(user_id, f"Ваш заказ #{order_id} готов к выдаче!\nЖдём вас в комнате 1204а")
+            result = await update_order_status(order_id, 'completed')
+            if result == 1:
+                await message.bot.send_message(user_id,
+                                               f"Ваш заказ #{order_id} готов к выдаче!\nЖдём вас в комнате 1204а")
                 await message.answer(f"Заказ #{order_id} успешно подтверждён")
-            else: message.answer(f"Заказ #{order_id} был отменёт. Я не могу сделать его выполненым")
+            elif result == 2:
+                await message.answer(f"Заказ #{order_id} уже подтверждён")
+            elif result == 0:
+                await message.answer(f"Заказ #{order_id} был отменёт. Я не могу сделать его выполненым")
+
 
 
 

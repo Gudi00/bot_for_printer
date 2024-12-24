@@ -158,12 +158,15 @@ async def update_order_status(order_id: int, status: str):
         # Получаем текущий статус заказа
         current_status = await session.scalar(select(Order.status).where(Order.id == order_id))
 
-        if current_status is None:
-            # Заказ не найден
-            return 0
-        else:
+
+        if current_status == status:
+            # Статус заказа уже такой же, как и новый статус
+            return 2
+        elif current_status == "None":
             # Обновляем статус заказа
             stmt = update(Order).where(Order.id == order_id).values(status=status)
             await session.execute(stmt)
             await session.commit()
             return 1
+        else:
+            return 0

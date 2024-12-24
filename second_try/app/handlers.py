@@ -137,20 +137,23 @@ async def cancel_order_command(message: Message):
 
     args = message.text.split()
     if len(args) != 2:
-        await message.answer("Использование: /cancel_order {номер_заказа}")
+        await message.answer("Использование: /cancel_order <номер_заказа>")
         return
 
     try:
         order_id = int(args[1])
         user_id = await get_order_user_id(order_id)
         if user_id == message.from_user.id:
-            if await update_order_status(order_id, 'cancelled'):
+            result = await update_order_status(order_id, 'cancelled')
+            if result == 1:
                 await message.answer(f"Ваш заказ #{order_id} успешно отменён.")
-                await message.bot.send_message(config['ADMIN_CHAT_ID'], f"Заказ #{order_id} отменён пользователем {message.from_user.username}.")
-            else:
-                await message.answer(f"Ваш заказ #{order_id} уже готов, вы не можете его отменить")
+                await message.bot.send_message(config['ADMIN_CHAT_ID'], f"Заказ #{order_id} отменён пользователем {message.from_user.id}.")
+            elif result == 2:
+                await message.answer(f"Заказ #{order_id} уже отменён.")
+            elif result == 0:
+                await message.answer(f"Заказ с идентификатором #{order_id} уже выполнен, поэтому вы не можете его отменить")
         else:
-            await message.answer("Вы не можете отменить этот заказ")
+            await message.answer("Вы не можете отменить этот заказ, так как он сделан другим пользователем.")
     except ValueError:
         await message.answer("Неверный формат номера заказа.")
     except Exception as e:
