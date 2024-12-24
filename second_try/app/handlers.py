@@ -97,9 +97,6 @@ async def process_pdf(message: Message, state: FSMContext):
             if num_pages == 1:
                 total_cost = prices['my_paper_1'] * (1-discount)
             elif 2 <= num_pages <= 5:
-                print(num_pages)
-                print(prices['my_paper_2_5'])
-                print((1-discount))
                 total_cost = num_pages * prices['my_paper_2_5'] * (1-discount)
             elif 6 <= num_pages <= 20:
                 total_cost = num_pages * prices['my_paper_6_20'] * (1-discount)
