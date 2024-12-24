@@ -72,5 +72,5 @@ target/
 dmypy.json
 
 # Environments
-.env
+
 downloads/
