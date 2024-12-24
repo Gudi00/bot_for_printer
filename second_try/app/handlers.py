@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 import app.keyboards as kb
 from app.config import load_config
-from app.database.requests import save_order, get_prices, save_user, is_user_banned, get_discount
+from app.database.requests import save_order, get_prices, save_user, is_user_banned, get_discount, get_last_order_id, get_order_user_id, update_order_status
 
 router = Router()
 config = load_config()
@@ -116,14 +116,45 @@ async def process_pdf(message: Message, state: FSMContext):
 
         # Отправляем файл и данные администратору
         admin_chat_id = config['ADMIN_CHAT_ID']
-        caption = (f"Новый заказ от @{message.from_user.username} {message.from_user.id}\n"
+        order_id = await get_last_order_id()
+        caption = (f"#{order_id}\nНовый заказ от @{message.from_user.username} {message.from_user.id}\n"
                    f"Количество страниц: {num_pages}\nСтоимость: {total_cost:.2f} рублей")
         await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
 
-        await message.answer(f"Итоговая стоимость: {total_cost:.2f} рублей\nСпасибо за заказ", reply_markup=kb.main)
+        await message.answer(f"Заказ номер {order_id}\nИтоговая стоимость: {total_cost:.2f} рублей\nСпасибо за заказ\n\nКогда заказ будет готов вам придет сообщение", reply_markup=kb.main)
         await state.clear()
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
+
+
+
+
+@router.message(Command("cancel_order"))
+async def cancel_order_command(message: Message):
+    if await check_ban(message):
+        await message.answer("Вы забанены и не можете выполнять эту команду.")
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /cancel_order {номер_заказа}")
+        return
+
+    try:
+        order_id = int(args[1])
+        user_id = await get_order_user_id(order_id)
+        if user_id == message.from_user.id:
+            if await update_order_status(order_id, 'cancelled'):
+                await message.answer(f"Ваш заказ #{order_id} успешно отменён.")
+                await message.bot.send_message(config['ADMIN_CHAT_ID'], f"Заказ #{order_id} отменён пользователем {message.from_user.username}.")
+            else:
+                await message.answer(f"Ваш заказ #{order_id} уже готов, вы не можете его отменить")
+        else:
+            await message.answer("Вы не можете отменить этот заказ")
+    except ValueError:
+        await message.answer("Неверный формат номера заказа.")
+    except Exception as e:
+        await message.answer(f"Ошибка при отмене заказа: {e}")
 
 async def process_invalid_pdf(message: Message):
     if await check_ban(message):

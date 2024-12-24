@@ -35,6 +35,7 @@ class Order(Base):
     num_pages = Column(Integer)
     total_cost = Column(Float)
     timestamp = Column(DateTime, default=func.now())
+    status = Column(String, default=None)
 
 async def async_main():
     async with engine.begin() as conn:

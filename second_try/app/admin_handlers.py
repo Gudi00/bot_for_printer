@@ -3,7 +3,7 @@ from aiogram import Router, types, Bot, Dispatcher
 from aiogram.types import Message, InputFile, CallbackQuery
 from aiogram.filters import Command
 from app.database.requests import (
-    get_orders_summary, get_user_orders_summary, set_discount,
+    get_orders_summary, get_user_orders_summary, set_discount, update_order_status,
     update_prices, get_prices, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user
 )
 from app.config import load_config
@@ -128,7 +128,12 @@ async def handle_reaction(message: Message):
         order_id = int(message.text)  # Предполагаем, что ID заказа находится в тексте сообщения
         user_id = await get_order_user_id(order_id)
         if user_id:
-            await message.bot.send_document(user_id, f"Ваш заказ #{order_id} готов к выдаче!")
+            if await update_order_status(order_id, 'completed'):
+                await message.bot.send_message(user_id, f"Ваш заказ #{order_id} готов к выдаче!\nЖдём вас в комнате 1204а")
+                await message.answer(f"Заказ #{order_id} успешно подтверждён")
+            else: message.answer(f"Заказ #{order_id} был отменёт. Я не могу сделать его выполненым")
+
+
 
 
 

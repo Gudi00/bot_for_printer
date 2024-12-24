@@ -114,6 +114,18 @@ async def get_order_user_id(order_id: int):
         order = await session.scalar(select(Order).where(Order.id == order_id))
         return order.user_id if order else None
 
+async def get_last_order_id():
+    try:
+        async with async_session() as session:
+            # Используем func.max для нахождения максимального значения id в таблице Order
+            result = await session.scalar(select(func.max(Order.id)))
+            if result is not None:
+                return result
+            else:
+                return "No orders found"
+    except Exception as e:
+        print(f"Error in get_last_order_id: {e}")
+        return None
 
 # Добавляем функцию для проверки, забанен ли пользователь
 async def is_user_banned(tg_id: int):
@@ -134,3 +146,24 @@ async def unban_user(tg_id: int):
         stmt = update(User).where(User.tg_id == tg_id).values(is_banned=False)
         await session.execute(stmt)
         await session.commit()
+
+async def get_order_user_id(order_id: int) -> int:
+    async with async_session() as session:
+        result = await session.scalar(select(Order.user_id).where(Order.id == order_id))
+        return result
+
+
+async def update_order_status(order_id: int, status: str):
+    async with async_session() as session:
+        # Получаем текущий статус заказа
+        current_status = await session.scalar(select(Order.status).where(Order.id == order_id))
+
+        if current_status is None:
+            # Заказ не найден
+            return 0
+        else:
+            # Обновляем статус заказа
+            stmt = update(Order).where(Order.id == order_id).values(status=status)
+            await session.execute(stmt)
+            await session.commit()
+            return 1
