@@ -38,7 +38,9 @@ async def cmd_start(message: Message, state: FSMContext):
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
 
         return
-    await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа.", reply_markup=kb.main)
+    await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа или введите команду /help, чтобы узнать все возможности бота", reply_markup=kb.main)
+
+
 
 @router.message(lambda message: message.text == 'Создать заказ')
 async def create_order(message: Message, state: FSMContext):
@@ -127,7 +129,14 @@ async def process_pdf(message: Message, state: FSMContext):
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
 
 
-
+@router.message(Command("help"))
+async def help_command(message: Message):
+    await message.answer("Этот бот нужет для экономия вашего времени;) Но он принимает только PDF файлы((\n\nБот может:"
+                         "\n 1. Принимать заказы при нажатие на кнопку 'Создать заказ'."
+                         "\n2. Отправлять сообщение, когда администатор выполнит ваш заказ."
+                         "\n\nПолезные команды для работы с ботом:"
+                         "\n/cancel_order {number} - отменяет заказ под номер number"
+                         "\n/get_prices - отправит вам актуальные цены на печать")
 
 @router.message(Command("cancel_order"))
 async def cancel_order_command(message: Message):
@@ -137,7 +146,7 @@ async def cancel_order_command(message: Message):
 
     args = message.text.split()
     if len(args) != 2:
-        await message.answer("Использование: /cancel_order <номер_заказа>")
+        await message.answer("Использование: /cancel_order номер_заказа")
         return
 
     try:
