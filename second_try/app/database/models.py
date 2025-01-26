@@ -1,5 +1,5 @@
 from sqlalchemy import BigInteger, String, Column, Integer, Float, DateTime, func, Boolean
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 DATABASE_URL = 'sqlite+aiosqlite:///db.sqlite3'
@@ -16,15 +16,21 @@ class User(Base):
     username = Column(String, index=True)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
+    #birthday = date
     discount = Column(Float, default=0.0)
     is_banned = Column(Boolean, default=False)
     timestamp = Column(DateTime, default=func.now())
+
+ # Relationship to Money table
+    money_records = relationship('Money', back_populates='user', cascade='all, delete-orphan')
+
 
 class Price(Base):
     __tablename__ = 'prices'
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True)
     value = Column(Float)
+    name_for_user = Column(String, unique=True)
 
 class Order(Base):
     __tablename__ = 'orders'
@@ -36,6 +42,29 @@ class Order(Base):
     total_cost = Column(Float)
     timestamp = Column(DateTime, default=func.now())
     status = Column(String, default='None')
+
+class Money(Base): #дополнить (автооплата, скидка для постоянных клиетов на основе алгоритма)
+    __tablename__ = 'all_money'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    username = Column(String, index=True)
+    discount = Column(Float, index=True, default=0.5)
+    free_paper = Column(Integer, index=True, default=0)
+    money = Column(Float, index=True, default=1.0)
+    number_of_orders_per_week = Column(Integer, index=True, default=1)
+    number_of_completed_orders = Column(Integer, index=True, default=0)
+    number_of_orders = Column(Integer, index=True, default=0)
+
+# Relationship to User table
+    user = relationship('User', back_populates='money_records')
+
+class Admin_state(Base):
+    __tablename__ = 'admin_states'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    username = Column(String, index=True)
+    free_time = Column(String, index=True)
+    timestamp = Column(DateTime, default=func.now())
 
 async def async_main():
     async with engine.begin() as conn:

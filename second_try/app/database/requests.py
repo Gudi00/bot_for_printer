@@ -23,21 +23,51 @@ async def get_prices():
         print('Error in take price')
         return {}
 
-async def get_discount(tg_id: int):
+async def get_prices_for_command():
     try:
         async with async_session() as session:
-            # Запрашиваем пользователя по tg_id
-            user = await session.scalar(select(User).where(User.tg_id == tg_id))
-            if user:
-                # Возвращаем значение скидки
-                return user.discount
-            else:
-                # Если пользователь не найден, возвращаем None или другое подходящее значение
-                print('User not found')
-                return None
+            prices = await session.scalars(select(Price))
+            return {price.name_for_user: price.value for price in prices}
     except Exception as e:
-        print(f'Error in get_discount: {e}')
-        return None
+        print('Error in take price')
+        return {}
+
+async def generate_discount_message_admin(prices):
+    message = ""
+    discounts = range(0, 100, 10)  # Скидки от 0% до 90% с шагом 10%
+
+    for name, value in prices.items():
+        message += f"{name}:\n\n"
+        for discount in discounts:
+            discounted_value = value * (1 - discount / 100)
+            message += f"{discount}% - {discounted_value:.2f} рублей\n"
+        message += "\n"
+
+    return message
+
+async def getNoneOrders():
+    async with async_session() as session:
+        prices = await session.scalars(select(Order))
+        message = "Нужно выполнить:\n"
+
+        for price in prices:
+            message += f"Заказ номер: {price.id} от @{price.username}\n"
+        return message
+async def generate_discount_message_user(prices, user_discount):
+    message = f"Ваши цены с учётом вашей {user_discount} скидкой:\n\n"
+    for name, value in prices.items():
+        # Добавляем стоимость с учётом индивидуальной скидки пользователя
+        user_discounted_value = value * (1 - user_discount)
+        message += f"{name}: {user_discounted_value:.2f} рублей\n"
+    return message
+
+
+
+async def get_discount(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalar_one_or_none()
+        return user.discount
 
 async def save_order(user_id: int, username: str, file_name: str, num_pages: int, total_cost: float):
     try:
@@ -72,19 +102,21 @@ async def get_user_orders_summary(user_id: int):
         return total_orders, total_income
 
 async def set_discount(username: str, discount: float):
+    if username[0] == '@':
+        username = username[1: ]
     try:
-        async with async_session() as session:
-            # Находим пользователя по имени пользователя
-            user = await session.scalar(select(User).where(User.username == username))
-            if user:
-                # Обновляем значение скидки
-                stmt = update(User).where(User.username == username).values(discount=discount)
-                await session.execute(stmt)
-                await session.commit()
+        async with async_session() as session:  # Открываем сессию
+            stmt = update(User).where(User.username == username).values(
+                discount=discount)  # Создаем запрос на обновление
+            result = await session.execute(stmt)  # Выполняем запрос
+            await session.commit()  # Фиксируем изменения
+
+            # Проверяем количество затронутых строк
+            if result.rowcount > 0:
                 return True
             else:
-                print(f"User with username {username} not found")
                 return False
+
     except Exception as e:
         print(f"Error in set_discount: {e}")
         return False
@@ -170,3 +202,21 @@ async def update_order_status(order_id: int, status: str):
             return 1
         else:
             return 0
+
+async def get_none_orders():##
+    try:
+        async with async_session() as session:
+            orders = await session.scalars(select(Order))
+            return {order.id: order.status for order in orders}
+    except Exception as e:
+        print('Error in take price')
+        return {}
+
+async def get_user_discount():##
+    try:
+        async with async_session() as session:
+            users = await session.scalars(select(User))
+            return {user.username: user.discount for user in users}
+    except Exception as e:
+        print('Error in take price')
+        return {}

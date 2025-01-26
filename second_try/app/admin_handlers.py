@@ -4,9 +4,11 @@ from aiogram.types import Message, InputFile, CallbackQuery
 from aiogram.filters import Command
 from app.database.requests import (
     get_orders_summary, get_user_orders_summary, set_discount, update_order_status,
-    update_prices, get_prices, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user
+    update_prices, get_prices_for_command, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user,
+    generate_discount_message_admin, generate_discount_message_user, get_discount, getNoneOrders
 )
 from app.config import load_config
+
 
 router = Router()
 config = load_config()
@@ -63,10 +65,12 @@ async def update_prices_command(message: Message):
 
 @router.message(Command("get_prices"))
 async def get_prices_command(message: Message):
-
-    prices = await get_prices()
-    prices_text = "\n".join([f"{name}: {value} рублей" for name, value in prices.items()])
-    await message.answer(f"Актуальные цены:\n{prices_text}")
+    prices = await get_prices_for_command()
+    if message.from_user.id == int(config['ADMIN_CHAT_ID']):
+        prices_text = await generate_discount_message_admin(prices)
+    else:
+        prices_text = await generate_discount_message_user(prices, await get_discount(message.from_user.id))
+    await message.answer(f"{prices_text}")
 
 @router.message(Command("orders_summary"))
 async def orders_summary(message: Message):
@@ -75,6 +79,7 @@ async def orders_summary(message: Message):
 
     total_orders, total_income = await get_orders_summary()
     await message.answer(f"Общее количество заказов: {total_orders}\nОбщий доход: {total_income:.2f} рублей")
+
 
 @router.message(Command("user_orders_summary"))
 async def user_orders_summary(message: Message):
@@ -98,8 +103,10 @@ async def set_user_discount(message: Message):
     username, discount = args[1], args[2]
 
     discount = float(discount)
-    await set_discount(username, discount)
-    await message.answer(f"Скидка {discount:.2f} установлена для пользователя {username}")
+    if await set_discount(username, discount):
+        await message.answer(f"Скидка {discount:.2f} установлена для пользователя {username}")
+    else:
+        await message.answer(f"Ошибка в обновлении значения скидки")
 
 # @router.message(Command("get_all_files"))
 # async def get_all_files_command(message: Message):
@@ -118,6 +125,12 @@ async def clear_downloads_command(message: Message):
 
     clear_downloads()
     await message.answer("Папка 'downloads' очищена.")
+
+@router.message(Command("need_to_confirm"))
+async def NoneOrders(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+    await message.answer(f"{await getNoneOrders()}")
 
 @router.message()
 async def handle_reaction(message: Message):

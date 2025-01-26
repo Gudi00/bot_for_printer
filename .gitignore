@@ -59,6 +59,7 @@ docs/_build/
 
 # PyBuilder
 target/
+db.sqlite3
 
 # Jupyter Notebook
 .ipynb_checkpoints

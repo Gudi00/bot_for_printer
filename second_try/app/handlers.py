@@ -1,4 +1,6 @@
 import os
+from math import floor
+
 import fitz  # PyMuPDF
 from aiogram import Router, types, Bot, Dispatcher
 from aiogram.types import Message, ContentType, InputFile
@@ -8,7 +10,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 import app.keyboards as kb
 from app.config import load_config
-from app.database.requests import save_order, get_prices, save_user, is_user_banned, get_discount, get_last_order_id, get_order_user_id, update_order_status
+from app.database.requests import (save_order, get_prices, save_user, is_user_banned, get_discount,
+                                   get_last_order_id, get_order_user_id, update_order_status)
 
 router = Router()
 config = load_config()
@@ -38,7 +41,8 @@ async def cmd_start(message: Message, state: FSMContext):
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
 
         return
-    await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа или введите команду /help, чтобы узнать все возможности бота", reply_markup=kb.main)
+    await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа или введите команду "
+                         "/help, чтобы узнать все возможности бота", reply_markup=kb.main)
 
 
 
@@ -88,10 +92,15 @@ async def process_pdf(message: Message, state: FSMContext):
         pdf_document = fitz.open(file_save_path)
         num_pages = pdf_document.page_count
 
+        if num_pages > 150:
+            await message.answer(f"В файле слишком много страниц. Отправьте его по отдельности")
+            return
+
         # Получаем цены из базы данных
         prices = await get_prices()
-        discount = await get_discount(message.from_user.id)
-
+        discount = float(await get_discount(message.from_user.id))
+#дать высокую скидку для постоянных клиентов на ограниченое количество заказов
+        # (проверка на наличие денег для новый неподтверждённых польхоавтелей, проверка на бесплатные листы)
         if discount == -1 and num_pages < 6:
             total_cost = 0.00
             #добавить счётчик, чтобы не абузили
@@ -120,10 +129,14 @@ async def process_pdf(message: Message, state: FSMContext):
         admin_chat_id = config['ADMIN_CHAT_ID']
         order_id = await get_last_order_id()
         caption = (f"#{order_id}\nНовый заказ от @{message.from_user.username} {message.from_user.id}\n"
-                   f"Количество страниц: {num_pages}\nСтоимость: {total_cost:.2f} рублей")
+                   f"Количество страниц: {num_pages}\nСкидка: {discount*100} рублей\nСтоимость: {total_cost:.2f} рублей")
         await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
 
-        await message.answer(f"Заказ номер {order_id}\nИтоговая стоимость: {total_cost:.2f} рублей\nСпасибо за заказ\n\nКогда заказ будет готов вам придет сообщение", reply_markup=kb.main)
+        caption = (f"Заказ номер {order_id}\nИтоговая стоимость: {total_cost:.2f} рублей"
+                   f"\nСкидка: {total_cost/(1-discount)*discount} рублей"
+                   f"\n\nКогда заказ будет готов, вам придет сообщение в этот чат")
+        await message.bot.send_document(chat_id=message.from_user.id, document=document.file_id, caption=caption, reply_markup=kb.main)
+
         await state.clear()
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
@@ -132,10 +145,10 @@ async def process_pdf(message: Message, state: FSMContext):
 @router.message(Command("help"))
 async def help_command(message: Message):
     await message.answer("Этот бот нужет для экономия вашего времени;) Но он принимает только PDF файлы((\n\nБот может:"
-                         "\n 1. Принимать заказы при нажатие на кнопку 'Создать заказ'."
+                         "\n1. Принимать заказы при нажатие на кнопку 'Создать заказ'."
                          "\n2. Отправлять сообщение, когда администатор выполнит ваш заказ."
                          "\n\nПолезные команды для работы с ботом:"
-                         "\n/cancel_order {number} - отменяет заказ под номер number"
+                         "\n/cancel_order {number} - отменяет заказ под номером number"
                          "\n/get_prices - отправит вам актуальные цены на печать")
 
 @router.message(Command("cancel_order"))
@@ -152,11 +165,11 @@ async def cancel_order_command(message: Message):
     try:
         order_id = int(args[1])
         user_id = await get_order_user_id(order_id)
-        if user_id == message.from_user.id:
+        if user_id == message.from_user.id or message.from_user.id == int(config['ADMIN_CHAT_ID']):#добавил отмену через админа
             result = await update_order_status(order_id, 'cancelled')
             if result == 1:
                 await message.answer(f"Ваш заказ #{order_id} успешно отменён.")
-                await message.bot.send_message(config['ADMIN_CHAT_ID'], f"Заказ #{order_id} отменён пользователем {message.from_user.id}.")
+                await message.bot.send_message(config['ADMIN_CHAT_ID'], f"Заказ #{order_id} отменён пользователем @{message.from_user.username}.")
             elif result == 2:
                 await message.answer(f"Заказ #{order_id} уже отменён.")
             elif result == 0:
