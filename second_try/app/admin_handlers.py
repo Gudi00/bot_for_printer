@@ -5,7 +5,8 @@ from aiogram.filters import Command
 from app.database.requests import (
     get_orders_summary, get_user_orders_summary, set_discount, update_order_status,
     update_prices, get_prices_for_command, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user,
-    generate_discount_message_admin, generate_discount_message_user, get_discount, getNoneOrders
+    generate_discount_message_admin, generate_discount_message_user, get_discount, getNoneOrders, update_money,
+    update_number_of_messages, update_number_of_messages_from_last_order, get_messages_from_last_order
 )
 from app.config import load_config
 
@@ -118,6 +119,26 @@ async def set_user_discount(message: Message):
 #         document_file = InputFile(filepath)
 #         await message.answer_document(document_file)
 
+@router.message(Command("update_money"))
+async def handle_update_money_command(message: types.Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+    try:
+        # Парсинг команды /update_money user_id new_money_value
+        command_args = message.text.split()
+        if len(command_args) != 3:
+            await message.reply("Используйте команду в формате: /update_money <username> <new_money_value>")
+            return
+
+        user_id = int(command_args[1])
+        new_money_value = float(command_args[2])
+
+        # Обновление значения money
+        await update_money(user_id, new_money_value)
+        await message.reply(f"Значение money для пользователя с user_id {user_id} обновлено на {new_money_value}")
+    except Exception as e:
+        await message.reply(f"Произошла ошибка: {e}")
+
 @router.message(Command("clear_downloads"))
 async def clear_downloads_command(message: Message):
     if message.from_user.id != int(config['ADMIN_CHAT_ID']):
@@ -135,21 +156,34 @@ async def NoneOrders(message: Message):
 @router.message()
 async def handle_reaction(message: Message):
     if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        await update_number_of_messages(message.from_user.id)
+        await update_number_of_messages_from_last_order(message.from_user.id)
+
+        if await get_messages_from_last_order(message.from_user.id) % 3 == 2:
+            await message.answer('Чтобы создать заказ нужно'
+                                 ' нажать на кнопку "Создать заказ" внизу экрана (иногда она сворачивается и выглядит '
+                                 'как кравадрат с 4 точками и находится возле кнопки отправить сообщение) или '
+                                 'написать "Создать заказ" (обязательно с большой буквы)')
         return
+
     bot_user = await bot.get_me()
     if message.reply_to_message and message.reply_to_message.from_user.id == bot_user.id:
-        order_id = int(message.text)  # Предполагаем, что ID заказа находится в тексте сообщения
+        text = message.text.split()
+        order_id = int(text[0])  # Предполагаем, что ID заказа находится в тексте сообщения
         user_id = await get_order_user_id(order_id)
         if user_id:
             result = await update_order_status(order_id, 'completed')
-            if result == 1:
-                await message.bot.send_message(user_id,
-                                               f"Ваш заказ #{order_id} готов к выдаче!\nЖдём вас в комнате 1204а")
-                await message.answer(f"Заказ #{order_id} успешно подтверждён")
-            elif result == 2:
-                await message.answer(f"Заказ #{order_id} уже подтверждён")
-            elif result == 0:
-                await message.answer(f"Заказ #{order_id} был отменёт. Я не могу сделать его выполненым")
+            if len(text) > 1:
+                await message.answer(f"Тихое подтверждение))\nЗаказ #{order_id} успешно подтверждён")
+            else:
+                if result == 1:
+                    await message.bot.send_message(user_id,
+                                                   f"Ваш заказ #{order_id} готов к выдаче!\nЖдём вас в комнате 1204а")
+                    await message.answer(f"Заказ #{order_id} успешно подтверждён")
+                elif result == 2:
+                    await message.answer(f"Заказ #{order_id} уже подтверждён")
+                elif result == 0:
+                    await message.answer(f"Заказ #{order_id} был отменёт. Я не могу сделать его выполненым")
 
 
 

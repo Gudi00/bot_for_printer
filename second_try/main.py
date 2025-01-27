@@ -7,6 +7,7 @@ from app.admin_handlers import register_admin_handlers
 from app.database.models import async_main
 from app.config import load_config
 
+from app.database.requests import populate_prices
 
 async def main():
     config = load_config()
@@ -19,11 +20,15 @@ async def main():
     register_main_handlers(dp)
     register_admin_handlers(dp)
 
+    await populate_prices()
+
     await dp.start_polling(bot)
 
 
 if __name__ == '__main__':
     try:
+        print("Бот работает")
         asyncio.run(main())
+
     except KeyboardInterrupt:
         print('Бот выключен')

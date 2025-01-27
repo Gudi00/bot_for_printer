@@ -20,9 +20,8 @@ class User(Base):
     discount = Column(Float, default=0.0)
     is_banned = Column(Boolean, default=False)
     timestamp = Column(DateTime, default=func.now())
-
- # Relationship to Money table
-    money_records = relationship('Money', back_populates='user', cascade='all, delete-orphan')
+    messages = Column(Integer, index=True, default=0)
+    messages_from_last_order = Column(Integer, index=True, default=0)
 
 
 class Price(Base):
@@ -48,15 +47,13 @@ class Money(Base): #дополнить (автооплата, скидка дл�
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, index=True)
     username = Column(String, index=True)
-    discount = Column(Float, index=True, default=0.5)
+    discount = Column(Float, index=True, default=0)
     free_paper = Column(Integer, index=True, default=0)
-    money = Column(Float, index=True, default=1.0)
-    number_of_orders_per_week = Column(Integer, index=True, default=1)
+    money = Column(Float, index=True, default=0)
+    number_of_orders_per_week = Column(Integer, index=True, default=0)
     number_of_completed_orders = Column(Integer, index=True, default=0)
     number_of_orders = Column(Integer, index=True, default=0)
 
-# Relationship to User table
-    user = relationship('User', back_populates='money_records')
 
 class Admin_state(Base):
     __tablename__ = 'admin_states'

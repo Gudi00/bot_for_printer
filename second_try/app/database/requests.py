@@ -1,5 +1,5 @@
 from sqlalchemy import select, update, func
-from app.database.models import async_session, User, Price, Order
+from app.database.models import async_session, User, Price, Order, Money
 import os
 
 async def save_user(tg_id: int, username: str, first_name: str, last_name: str):
@@ -10,6 +10,8 @@ async def save_user(tg_id: int, username: str, first_name: str, last_name: str):
         if not user:
             new_user = User(tg_id=tg_id, username=username,
                             first_name=first_name, last_name=last_name)
+            session.add(new_user)
+            new_user = Money(user_id=tg_id, username=username)
             session.add(new_user)
             await session.commit()
             return 1
@@ -67,7 +69,19 @@ async def get_discount(tg_id: int):
     async with async_session() as session:
         result = await session.execute(select(User).where(User.tg_id == tg_id))
         user = result.scalar_one_or_none()
-        return user.discount
+        return float(user.discount)
+
+async def get_messages_from_last_order(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalar_one_or_none()
+        return int(user.messages_from_last_order)
+
+async def get_number_of_orders(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == tg_id))
+        user = result.scalar_one_or_none()
+        return int(user.number_of_orders)
 
 async def save_order(user_id: int, username: str, file_name: str, num_pages: int, total_cost: float):
     try:
@@ -140,6 +154,8 @@ def clear_downloads():
     for file_path in files:
         os.remove(file_path)
 
+
+
 # Добавляем функцию для получения user_id заказа
 async def get_order_user_id(order_id: int):
     async with async_session() as session:
@@ -159,6 +175,110 @@ async def get_last_order_id():
         print(f"Error in get_last_order_id: {e}")
         return None
 
+
+
+
+async def update_money(user_id: int, bill: float):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == user_id))
+        user = result.scalars().first()
+
+        was = float(user.money)
+        new = was + bill
+
+
+        # Обновление данных пользователя
+        stmt = (
+            update(Money)
+            .where(Money.user_id == user_id)
+            .values(money=new)
+        )
+        await session.execute(stmt)
+        await session.commit()
+        if new >= 0:
+            return (f"Стоимость заказа: 0.00 рубелй. Сумма, равная стоимости вашего заказа ({round(abs(bill), 2)} рублей),"
+                    f" была cписана с вашего счёта. Ваш остаток: {round(new, 2)} рублей")
+        elif round(was, 2) != 0:
+            return f"Стоимость заказа: {round(abs(bill), 2)}. Вам следует донести {round(abs(new), 2)} рублей"
+        else:
+            return f"Стоимость заказа: {round(abs(bill), 2)}"
+
+async def update_number_of_orders(user_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == user_id))
+        user = result.scalars().first()
+
+        new = int(user.number_of_orders) + 1
+
+            # Обновление данных пользователя
+        stmt = (
+            update(Money)
+            .where(Money.user_id == user_id)
+            .values(number_of_orders=new)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def update_number_of_messages(user_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.tg_id == user_id))
+        user = result.scalars().first()
+
+        new = int(user.messages) + 1
+
+            # Обновление данных пользователя
+        stmt = (
+            update(User)
+            .where(User.tg_id == user_id)
+            .values(messages=new)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def update_number_of_messages_from_last_order(user_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.tg_id == user_id))
+        user = result.scalars().first()
+
+        new = int(user.messages_from_last_order) + 1
+
+            # Обновление данных пользователя
+        stmt = (
+            update(User)
+            .where(User.tg_id == user_id)
+            .values(messages_from_last_order=new)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+
+async def populate_prices():
+    async with async_session() as session:
+        prices = [
+            {"name": "my_paper_1", "value": 0.25, "name_for_user": "1 лист"},
+            {"name": "my_paper_2_5", "value": 0.2, "name_for_user": "с 2 до 5 листов"},
+            {"name": "my_paper_6_20", "value": 0.17, "name_for_user": "с 6 до 20 листов"},
+            {"name": "my_paper_21_150", "value": 0.15, "name_for_user": "с 21 до 150 листов"},
+        ]
+
+        for price in prices:
+            # Проверка, существует ли уже запись с таким именем
+            result = await session.execute(select(Price).where(Price.name == price["name"]))
+            existing_price = result.scalars().first()
+
+            if not existing_price:
+                new_price = Price(
+                    name=price["name"],
+                    value=price["value"],
+                    name_for_user=price["name_for_user"],
+                )
+                session.add(new_price)
+
+        await session.commit()
+
+
+
 # Добавляем функцию для проверки, забанен ли пользователь
 async def is_user_banned(tg_id: int):
     async with async_session() as session:
@@ -176,6 +296,12 @@ async def ban_user(tg_id: int):
 async def unban_user(tg_id: int):
     async with async_session() as session:
         stmt = update(User).where(User.tg_id == tg_id).values(is_banned=False)
+        await session.execute(stmt)
+        await session.commit()
+
+async def damp_messages_from_last_order(tg_id: int):
+    async with async_session() as session:
+        stmt = update(User).where(User.tg_id == tg_id).values(messages_from_last_order=0)
         await session.execute(stmt)
         await session.commit()
 

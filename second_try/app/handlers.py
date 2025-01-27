@@ -11,7 +11,8 @@ from aiogram.fsm.state import State, StatesGroup
 import app.keyboards as kb
 from app.config import load_config
 from app.database.requests import (save_order, get_prices, save_user, is_user_banned, get_discount,
-                                   get_last_order_id, get_order_user_id, update_order_status)
+                                   get_last_order_id, get_order_user_id, update_order_status, get_number_of_orders,
+                                   update_number_of_orders, clear_downloads, update_money, damp_messages_from_last_order)
 
 router = Router()
 config = load_config()
@@ -55,6 +56,7 @@ async def create_order(message: Message, state: FSMContext):
         return
     await message.answer("Пожалуйста, отправьте PDF файл.")
     await state.set_state(OrderProcess.waiting_for_pdf)
+    clear_downloads()
 
 @router.message(OrderProcess.waiting_for_pdf)
 async def process_message(message: Message, state: FSMContext):
@@ -92,8 +94,9 @@ async def process_pdf(message: Message, state: FSMContext):
         pdf_document = fitz.open(file_save_path)
         num_pages = pdf_document.page_count
 
-        if num_pages > 150:
-            await message.answer(f"В файле слишком много страниц. Отправьте его по отдельности")
+        if num_pages > 300:
+            await message.answer(f"В файле слишком много страниц. Отправьте его по отдельности (не более 300 страниц)")
+            await state.clear()
             return
 
         # Получаем цены из базы данных
@@ -101,10 +104,15 @@ async def process_pdf(message: Message, state: FSMContext):
         discount = float(await get_discount(message.from_user.id))
 #дать высокую скидку для постоянных клиентов на ограниченое количество заказов
         # (проверка на наличие денег для новый неподтверждённых польхоавтелей, проверка на бесплатные листы)
-        if discount == -1 and num_pages < 6:
+        total_cost = 0
+        number_of_orders = await get_number_of_orders(message.from_user.id)
+        if discount == -1 and num_pages < 5:
             total_cost = 0.00
+            discount = 0.2
             #добавить счётчик, чтобы не абузили
         else:
+            if number_of_orders > 11:
+                discount = 0.5 * (1-number_of_orders*0.1)
             if num_pages == 1:
                 total_cost = prices['my_paper_1'] * (1-discount)
             elif 2 <= num_pages <= 5:
@@ -113,7 +121,6 @@ async def process_pdf(message: Message, state: FSMContext):
                 total_cost = num_pages * prices['my_paper_6_20'] * (1-discount)
             elif 21 <= num_pages:
                 total_cost = num_pages * prices['my_paper_21_150'] * (1-discount)
-
 
 
         # Сохранение заказа в базе данных
@@ -128,16 +135,28 @@ async def process_pdf(message: Message, state: FSMContext):
         # Отправляем файл и данные администратору
         admin_chat_id = config['ADMIN_CHAT_ID']
         order_id = await get_last_order_id()
-        caption = (f"#{order_id}\nНовый заказ от @{message.from_user.username} {message.from_user.id}\n"
-                   f"Количество страниц: {num_pages}\nСкидка: {discount*100} рублей\nСтоимость: {total_cost:.2f} рублей")
-        await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
 
-        caption = (f"Заказ номер {order_id}\nИтоговая стоимость: {total_cost:.2f} рублей"
-                   f"\nСкидка: {total_cost/(1-discount)*discount} рублей"
+        cost = await update_money(message.from_user.id, -total_cost)
+
+        send = ''
+        if 7+order_id*0.7 <= total_cost or total_cost > 30:
+             send = (f'У вас достаточно дорогой заказ, поэтому напишите лично @misha_iosko'
+                       ' или зайдите к нему в блок, когда вам придёт уведомление')
+
+        caption = (f"{send}\n#{order_id}\n\nНовый заказ от @{message.from_user.username} {message.from_user.id}\n"
+                   f"Количество страниц: {num_pages}\nСкидка: {discount*100}% ({round(total_cost/(1-discount)*discount, 2)} рублей)"
+                          f"\n\n{cost}")
+        await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
+        
+
+        caption = (f"{send}\n\nЗаказ номер {order_id}\n\n{cost}\n"
+                   f"\nСкидка: {round(total_cost/(1-discount)*discount, 2)} рублей"
                    f"\n\nКогда заказ будет готов, вам придет сообщение в этот чат")
         await message.bot.send_document(chat_id=message.from_user.id, document=document.file_id, caption=caption, reply_markup=kb.main)
-
+        await update_number_of_orders(message.from_user.id)
+        await damp_messages_from_last_order(message.from_user.id)
         await state.clear()
+
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
 
