@@ -12,7 +12,8 @@ import app.keyboards as kb
 from app.config import load_config
 from app.database.requests import (save_order, get_prices, save_user, is_user_banned, get_discount,
                                    get_last_order_id, get_order_user_id, update_order_status, get_number_of_orders,
-                                   update_number_of_orders, clear_downloads, update_money, damp_messages_from_last_order)
+                                   update_number_of_orders, clear_downloads, update_money, damp_messages_from_last_order,
+                                   ban_user, get_number_of_completed_orders, fetch_user_money)
 
 router = Router()
 config = load_config()
@@ -26,6 +27,8 @@ async def check_ban(message: Message):
 
 class OrderProcess(StatesGroup):
     waiting_for_pdf = State()
+
+
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
@@ -52,8 +55,16 @@ async def create_order(message: Message, state: FSMContext):
     if await check_ban(message):
         await message.answer(
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
-
+        await state.clear()
         return
+    if await get_number_of_orders(message.from_user.id) - await get_number_of_completed_orders(message.from_user.id) > 15:
+        await ban_user(message.from_user.id)
+        admin_chat_id = config['ADMIN_CHAT_ID']
+        caption = (f"Пользователь был заблокирован за большое количество неподтверждённых заказов"
+                   f"\n\nusername: {message.from_user.username}\n tg_id: {message.from_user.id}")
+        await message.bot.send_message(chat_id=admin_chat_id, text=caption)
+
+
     await message.answer("Пожалуйста, отправьте PDF файл.")
     await state.set_state(OrderProcess.waiting_for_pdf)
     clear_downloads()
@@ -147,7 +158,7 @@ async def process_pdf(message: Message, state: FSMContext):
                    f"Количество страниц: {num_pages}\nСкидка: {discount*100}% ({round(total_cost/(1-discount)*discount, 2)} рублей)"
                           f"\n\n{cost}")
         await message.bot.send_document(chat_id=admin_chat_id, document=document.file_id, caption=caption)
-        
+
 
         caption = (f"{send}\n\nЗаказ номер {order_id}\n\n{cost}\n"
                    f"\nСкидка: {round(total_cost/(1-discount)*discount, 2)} рублей"
@@ -160,7 +171,13 @@ async def process_pdf(message: Message, state: FSMContext):
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
 
-
+# @router.message(Command("money"))
+# async def fetch_user_money(message: Message):
+#     if await check_ban(message):
+#         await message.answer("Вы забанены и не можете выполнять эту команду.")
+#         return
+#     money = await fetch_user_money(message.from_user.id)
+#     await message.answer(f"У вас на счету {money} рублей")
 @router.message(Command("help"))
 async def help_command(message: Message):
     await message.answer("Этот бот нужет для экономия вашего времени;) Но он принимает только PDF файлы((\n\nБот может:"
@@ -169,6 +186,9 @@ async def help_command(message: Message):
                          "\n\nПолезные команды для работы с ботом:"
                          "\n/cancel_order {number} - отменяет заказ под номером number"
                          "\n/get_prices - отправит вам актуальные цены на печать")
+
+
+
 
 @router.message(Command("cancel_order"))
 async def cancel_order_command(message: Message):

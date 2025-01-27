@@ -55,6 +55,12 @@ async def getNoneOrders():
         for price in prices:
             message += f"Заказ номер: {price.id} от @{price.username}\n"
         return message
+
+async def get_id_all_users():
+    async with async_session() as session:
+        users = await session.scalars(select(User))
+        return users
+
 async def generate_discount_message_user(prices, user_discount):
     message = f"Ваши цены с учётом вашей {user_discount} скидкой:\n\n"
     for name, value in prices.items():
@@ -71,6 +77,12 @@ async def get_discount(tg_id: int):
         user = result.scalar_one_or_none()
         return float(user.discount)
 
+async def fetch_user_money(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == tg_id))
+        user = result.scalar_one_or_none()
+        return float(user.money)
+
 async def get_messages_from_last_order(tg_id: int):
     async with async_session() as session:
         result = await session.execute(select(User).where(User.tg_id == tg_id))
@@ -82,6 +94,18 @@ async def get_number_of_orders(tg_id: int):
         result = await session.execute(select(Money).where(Money.user_id == tg_id))
         user = result.scalar_one_or_none()
         return int(user.number_of_orders)
+
+async def get_number_of_completed_orders(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == tg_id))
+        user = result.scalar_one_or_none()
+        return int(user.number_of_completed_orders)
+
+async def get_number_of_completed_orders(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == tg_id))
+        user = result.scalar_one_or_none()
+        return int(user.number_of_completed_orders)
 
 async def save_order(user_id: int, username: str, file_name: str, num_pages: int, total_cost: float):
     try:
@@ -215,6 +239,23 @@ async def update_number_of_orders(user_id: int):
             update(Money)
             .where(Money.user_id == user_id)
             .values(number_of_orders=new)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def update_number_of_completed_orders(user_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == user_id))
+        user = result.scalars().first()
+
+        new = int(user.number_of_completed_orders) + 1
+
+            # Обновление данных пользователя
+        stmt = (
+            update(Money)
+            .where(Money.user_id == user_id)
+            .values(number_of_completed_orders=new)
         )
         await session.execute(stmt)
         await session.commit()

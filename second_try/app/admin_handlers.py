@@ -6,7 +6,8 @@ from app.database.requests import (
     get_orders_summary, get_user_orders_summary, set_discount, update_order_status,
     update_prices, get_prices_for_command, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user,
     generate_discount_message_admin, generate_discount_message_user, get_discount, getNoneOrders, update_money,
-    update_number_of_messages, update_number_of_messages_from_last_order, get_messages_from_last_order
+    update_number_of_messages, update_number_of_messages_from_last_order, get_messages_from_last_order, get_id_all_users,
+    update_number_of_completed_orders,
 )
 from app.config import load_config
 
@@ -47,6 +48,9 @@ async def unban_command(message: Message):
         user_id = int(args[1])
         await unban_user(user_id)
         await message.answer(f"Пользователь {user_id} разбанен.")
+        caption = (f"Прошу прошения, вы были заблокированы по ошибке😣 В качестве извинения предоставлем вам 5.00 рублей на следующие заказы")
+        await update_money(user_id, 5)
+        await message.bot.send_message(chat_id=user_id, text=caption)
     except Exception as e:
         await message.answer(f"Ошибка при разбане пользователя: {e}")
 
@@ -153,6 +157,21 @@ async def NoneOrders(message: Message):
         return
     await message.answer(f"{await getNoneOrders()}")
 
+@router.message(Command("send_message_for_all_users"))
+async def send_message_for_all_users(message: Message):
+    if message.from_user.id != int(config['ADMIN_CHAT_ID']):
+        return
+
+    text = message.text.split()
+    if len(text) != 2:
+        await message.reply("Используйте команду в формате: /send_message_for_all_users <text>")
+        return
+    textForUsers = text[1]
+    users = await get_id_all_users()
+    for user in users:
+        await message.bot.send_message(user.tg_id, textForUsers)
+    await message.reply("Готово))")
+
 @router.message()
 async def handle_reaction(message: Message):
     if message.from_user.id != int(config['ADMIN_CHAT_ID']):
@@ -175,15 +194,18 @@ async def handle_reaction(message: Message):
             result = await update_order_status(order_id, 'completed')
             if len(text) > 1:
                 await message.answer(f"Тихое подтверждение))\nЗаказ #{order_id} успешно подтверждён")
+                await update_number_of_completed_orders(user_id)
             else:
                 if result == 1:
                     await message.bot.send_message(user_id,
                                                    f"Ваш заказ #{order_id} готов к выдаче!\nЖдём вас в комнате 1204а")
                     await message.answer(f"Заказ #{order_id} успешно подтверждён")
+                    await update_number_of_completed_orders(user_id)
                 elif result == 2:
                     await message.answer(f"Заказ #{order_id} уже подтверждён")
                 elif result == 0:
                     await message.answer(f"Заказ #{order_id} был отменёт. Я не могу сделать его выполненым")
+                    await update_number_of_completed_orders(user_id)
 
 
 
