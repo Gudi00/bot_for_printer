@@ -2,6 +2,8 @@ from sqlalchemy import select, update, func, desc
 from app.database.models import async_session, User, Price, Order, Money
 import os
 
+
+
 async def save_user(tg_id: int, username: str, first_name: str, last_name: str):
     async with async_session() as session:
         user = await session.execute(select(User).where(User.tg_id == tg_id))
@@ -455,3 +457,4 @@ async def get_user_discount():##
     except Exception as e:
         print('Error in take price')
         return {}
+

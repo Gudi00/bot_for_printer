@@ -1,5 +1,6 @@
 import os
 from math import floor
+import asyncio
 
 import fitz  # PyMuPDF
 from aiogram import Router, types, Bot, Dispatcher, F
@@ -15,9 +16,11 @@ from app.database.requests import (save_order, get_prices, save_user, is_user_ba
                                    update_number_of_orders, clear_downloads, update_money, damp_messages_from_last_order,
                                    ban_user, get_number_of_completed_orders, fetch_user_money, get_number_of_orders_per_week,
                                    update_number_of_orders_per_week, get_last_order_number, update_referral, get_ref)
-
+from app.database.requests import get_current_week, get_schedule, get_first_class_time
 router = Router()
 config = load_config()
+
+lock = asyncio.Lock()
 
 # Создаем директорию 'downloads', если она не существует
 if not os.path.exists('downloads'):
@@ -32,6 +35,11 @@ class OrderProcess(StatesGroup):
 
 
 @router.message(Command("start"))
+async def smth(message: Message):
+    await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа или введите команду "
+                         "/help, чтобы узнать все возможности бота", reply_markup=kb.main)
+    await cmd_start(message)
+
 async def cmd_start(message: Message):
     # Сохраняем данные пользователя в базу данных
     if await save_user(tg_id=message.from_user.id, username=message.from_user.username,
@@ -46,8 +54,8 @@ async def cmd_start(message: Message):
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
 
         return
-    await message.answer("Нажмите кнопку 'Создать заказ' для начала оформления заказа или введите команду "
-                         "/help, чтобы узнать все возможности бота", reply_markup=kb.main)
+
+
 
 
 
@@ -73,21 +81,22 @@ async def create_order(message: Message, state: FSMContext):
 
 @router.message(OrderProcess.waiting_for_pdf)
 async def process_message(message: Message, state: FSMContext):
-    if await check_ban(message):
-        await message.answer(
-            "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
+    async with lock:
+        if await check_ban(message):
+            await message.answer(
+                "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
 
-        return
-    await cmd_start(message)
-    if message.content_type == ContentType.DOCUMENT:
-        await process_pdf(message, state)
-    else:
-        await process_invalid_pdf(message)
+            return
+        await cmd_start(message)
+        if message.content_type == ContentType.DOCUMENT:
+            await process_pdf(message, state)
+        else:
+            await process_invalid_pdf(message)
 
 async def process_pdf(message: Message, state: FSMContext):
     if await check_ban(message):
         return
-
+    i = 0
     document = message.document
 
     # Проверяем MIME-тип документа
@@ -129,8 +138,8 @@ async def process_pdf(message: Message, state: FSMContext):
 
             #добавить счётчик, чтобы не абузили
         else:
-            if number_of_orders > 6:
-                discount = 0.5 * (1-number_of_orders*0.2)
+            if number_of_orders == 0:
+                discount = 0.5
             if num_pages == 1:
                 total_cost = prices['my_paper_1'] * (1-discount)
             elif 2 <= num_pages <= 5:
@@ -155,7 +164,8 @@ async def process_pdf(message: Message, state: FSMContext):
         order_id = await get_last_order_id()
 
         cost = await update_money(message.from_user.id, -total_cost)
-        await update_money(await get_ref(message.from_user.id) ,total_cost*0.1)
+        if await get_ref(message.from_user.id):
+            await update_money(get_ref(message.from_user.id)  ,total_cost*0.1)
         send = ''
         if 7+order_id*0.7 <= total_cost or total_cost > 30:
              send = (f'У вас достаточно дорогой заказ, поэтому напишите лично @misha_iosko'
@@ -265,24 +275,23 @@ async def send_for_creator(message: Message, state: FSMContext):
 
 @router.message(Command("update_referral"))
 async def update_ref(message: Message):
-    await cmd_start(message)
-    args = message.text.split()
-    if len(args) != 2:
-        await message.answer("Использование: /update_referral <username>")
-        return
-    discount, ref_id = await update_referral(args[1], message.from_user.id)
-    if ref_id and discount:
-        await message.answer(f"Всё получилось, типерь ваша скидка увеличилась до {discount*100}%")
-        await message.bot.send_message(chat_id=ref_id,
-                                       text=f"@{message.from_user.username} перешёл по вашей реферальной ссылке, "
-                                            f"теперь вы будете получать 10% со всех его заказов")
-    elif ref_id == 0 and discount == 0:
-        await message.answer(f"Этот пользователь никогда не пользовался новой версией бота. "
-                             f"Попросите его написать в чат команду '/start' или перепроверьте правильность написания")
-    else:
-        await message.answer(f"Вы уже переходили по реферальным ссылкам")
-
-
+    async with lock:
+        await cmd_start(message)
+        args = message.text.split()
+        if len(args) != 2:
+            await message.answer("Использование: /update_referral <username>")
+            return
+        discount, ref_id = await update_referral(args[1], message.from_user.id)
+        if ref_id and discount:
+            await message.answer(f"Всё получилось, типерь ваша скидка увеличилась до {discount*100}%")
+            await message.bot.send_message(chat_id=ref_id,
+                                           text=f"@{message.from_user.username} перешёл по вашей реферальной ссылке, "
+                                                f"теперь вы будете получать 10% со всех его заказов")
+        elif ref_id == 0 and discount == 0:
+            await message.answer(f"Этот пользователь никогда не пользовался новой версией бота. "
+                                 f"Попросите его написать в чат команду '/start' или перепроверьте правильность написания")
+        else:
+            await message.answer(f"Вы уже переходили по реферальным ссылкам")
 
 def register_main_handlers(dp: Dispatcher):
     dp.include_router(router)
