@@ -16,6 +16,7 @@ class User(Base):
     username = Column(String, index=True)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
+    ref = Column(BigInteger, index=True, default=0)
     #birthday = date
     discount = Column(Float, default=0.0)
     is_banned = Column(Boolean, default=False)
@@ -34,7 +35,7 @@ class Price(Base):
 class Order(Base):
     __tablename__ = 'orders'
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
+    user_id = Column(BigInteger, index=True)
     username = Column(String, index=True)
     file_name = Column(String)
     num_pages = Column(Integer)
@@ -45,7 +46,7 @@ class Order(Base):
 class Money(Base): #дополнить (автооплата, скидка для постоянных клиетов на основе алгоритма)
     __tablename__ = 'all_money'
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
+    user_id = Column(BigInteger, index=True)
     username = Column(String, index=True)
     discount = Column(Float, index=True, default=0)
     free_paper = Column(Integer, index=True, default=0)
@@ -58,7 +59,7 @@ class Money(Base): #дополнить (автооплата, скидка дл�
 class Admin_state(Base):
     __tablename__ = 'admin_states'
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
+    user_id = Column(BigInteger, index=True)
     username = Column(String, index=True)
     free_time = Column(String, index=True)
     timestamp = Column(DateTime, default=func.now())

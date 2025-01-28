@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, desc
 from app.database.models import async_session, User, Price, Order, Money
 import os
 
@@ -15,6 +15,11 @@ async def save_user(tg_id: int, username: str, first_name: str, last_name: str):
             session.add(new_user)
             await session.commit()
             return 1
+
+async def get_number_of_orders_per_week():
+    async with async_session() as session:
+        orders = await session.scalars(select(Money))
+        return orders
 
 async def get_prices():
     try:
@@ -82,6 +87,23 @@ async def fetch_user_money(tg_id: int):
         result = await session.execute(select(Money).where(Money.user_id == tg_id))
         user = result.scalar_one_or_none()
         return float(user.money)
+
+async def get_last_order_number(user_id: int):
+    async with async_session() as session:
+        # Выполняем запрос к таблице orders
+        result = await session.execute(
+            select(Order).where(Order.user_id == user_id).order_by(desc(Order.id))
+        )
+        # Получаем последний заказ
+        last_order = result.scalars().first()
+        # Возвращаем номер заказа, если заказ найден, иначе None
+        return last_order.id if last_order else None
+
+async def get_number_of_orders_per_week(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(Money).where(Money.user_id == tg_id))
+        user = result.scalar_one_or_none()
+        return int(user.number_of_orders_per_week)
 
 async def get_messages_from_last_order(tg_id: int):
     async with async_session() as session:
@@ -239,6 +261,17 @@ async def update_number_of_orders(user_id: int):
             update(Money)
             .where(Money.user_id == user_id)
             .values(number_of_orders=new)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def update_number_of_orders_per_week(user_id: int, new: int):
+    async with async_session() as session:
+            # Обновление данных пользователя
+        stmt = (
+            update(Money)
+            .where(Money.user_id == user_id)
+            .values(number_of_orders_per_week=new)
         )
         await session.execute(stmt)
         await session.commit()

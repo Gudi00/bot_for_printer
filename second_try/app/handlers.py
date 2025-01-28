@@ -2,7 +2,7 @@ import os
 from math import floor
 
 import fitz  # PyMuPDF
-from aiogram import Router, types, Bot, Dispatcher
+from aiogram import Router, types, Bot, Dispatcher, F
 from aiogram.types import Message, ContentType, InputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -13,7 +13,8 @@ from app.config import load_config
 from app.database.requests import (save_order, get_prices, save_user, is_user_banned, get_discount,
                                    get_last_order_id, get_order_user_id, update_order_status, get_number_of_orders,
                                    update_number_of_orders, clear_downloads, update_money, damp_messages_from_last_order,
-                                   ban_user, get_number_of_completed_orders, fetch_user_money)
+                                   ban_user, get_number_of_completed_orders, fetch_user_money, get_number_of_orders_per_week,
+                                   update_number_of_orders_per_week, get_last_order_number)
 
 router = Router()
 config = load_config()
@@ -57,7 +58,7 @@ async def create_order(message: Message, state: FSMContext):
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
         await state.clear()
         return
-    if await get_number_of_orders(message.from_user.id) - await get_number_of_completed_orders(message.from_user.id) > 15:
+    if await get_number_of_orders(message.from_user.id) - await get_number_of_completed_orders(message.from_user.id) > 20:
         await ban_user(message.from_user.id)
         admin_chat_id = config['ADMIN_CHAT_ID']
         caption = (f"Пользователь был заблокирован за большое количество неподтверждённых заказов"
@@ -117,13 +118,16 @@ async def process_pdf(message: Message, state: FSMContext):
         # (проверка на наличие денег для новый неподтверждённых польхоавтелей, проверка на бесплатные листы)
         total_cost = 0
         number_of_orders = await get_number_of_orders(message.from_user.id)
-        if discount == -1 and num_pages < 5:
-            total_cost = 0.00
+        if discount == -1:
             discount = 0.2
+            if num_pages < 6 and await get_number_of_orders_per_week(message.from_user.id) > 0:
+                total_cost = 0.00
+                await update_number_of_orders_per_week(message.from_user.id)
+
             #добавить счётчик, чтобы не абузили
         else:
-            if number_of_orders > 11:
-                discount = 0.5 * (1-number_of_orders*0.1)
+            if number_of_orders > 6:
+                discount = 0.5 * (1-number_of_orders*0.2)
             if num_pages == 1:
                 total_cost = prices['my_paper_1'] * (1-discount)
             elif 2 <= num_pages <= 5:
@@ -171,13 +175,13 @@ async def process_pdf(message: Message, state: FSMContext):
     except Exception as e:
         await message.answer(f"Произошла ошибка при обработке файла: {str(e)}")
 
-# @router.message(Command("money"))
-# async def fetch_user_money(message: Message):
-#     if await check_ban(message):
-#         await message.answer("Вы забанены и не можете выполнять эту команду.")
-#         return
-#     money = await fetch_user_money(message.from_user.id)
-#     await message.answer(f"У вас на счету {money} рублей")
+@router.message(Command("money"))
+async def send_fetch_user_money(message: Message):
+    if await check_ban(message):
+        await message.answer("Вы забанены и не можете выполнять эту команду.")
+        return
+    money = await fetch_user_money(message.from_user.id)
+    await message.answer(f"У вас на счету {money} рублей")
 @router.message(Command("help"))
 async def help_command(message: Message):
     await message.answer("Этот бот нужет для экономия вашего времени;) Но он принимает только PDF файлы((\n\nБот может:"
@@ -224,6 +228,32 @@ async def process_invalid_pdf(message: Message):
     if await check_ban(message):
         return
     await message.answer("Пожалуйста, отправьте файл в формате PDF.")
+
+
+
+
+
+class for_me(StatesGroup):
+    user_message = State()
+
+@router.message(F.text == 'Комментарий к заказу')
+async def start_saving_for_creator(message: Message, state: FSMContext):
+    await message.answer("Теперь вы можете отпавить комментарий к заказу. Если это не обычный запрос, то итоговая цена может измениться", reply_markup=types.ReplyKeyboardRemove())
+    await state.set_state(for_me.user_message)
+
+@router.message(Command("message_for_creator"))
+async def start_saving_for_creator(message: Message, state: FSMContext):
+    await message.answer("Теперь вы можете отпавить сообщение для разработчика", reply_markup=types.ReplyKeyboardRemove())
+    await state.set_state(for_me.user_message)
+
+@router.message(for_me.user_message)
+async def send_for_creator(message: Message, state: FSMContext):
+    await message.bot.send_message(config['ADMIN_CHAT_ID'],
+                                   f"К заказу номер {await get_last_order_number(message.from_user.id)}"
+                                   f"\n@{message.from_user.username} советует:\n\n{message.text}")
+    await state.clear()
+    await message.answer('Ваше сообщение отправлено', reply_markup=kb.main)
+
 
 def register_main_handlers(dp: Dispatcher):
     dp.include_router(router)
