@@ -102,14 +102,14 @@ async def set_user_discount(message: Message):
 
     args = message.text.split()
     if len(args) != 3:
-        await message.answer("Использование: /set_discount <username> <discount>")
+        await message.answer("Использование: /set_discount <user_id> <discount>")
         return
 
-    username, discount = args[1], args[2]
+    user_id, discount = int(args[1]), args[2]
 
     discount = float(discount)
-    if await set_discount(username, discount):
-        await message.answer(f"Скидка {discount:.2f} установлена для пользователя {username}")
+    if await set_discount(user_id, discount):
+        await message.answer(f"Скидка {discount:.2f} установлена для пользователя {user_id}")
     else:
         await message.answer(f"Ошибка в обновлении значения скидки")
 
@@ -174,6 +174,7 @@ async def send_message_for_all_users(message: Message):
 
 @router.message()
 async def handle_reaction(message: Message):
+
     if message.from_user.id != int(config['ADMIN_CHAT_ID']):
         await update_number_of_messages(message.from_user.id)
         await update_number_of_messages_from_last_order(message.from_user.id)

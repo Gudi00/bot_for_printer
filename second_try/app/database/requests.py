@@ -88,6 +88,36 @@ async def fetch_user_money(tg_id: int):
         user = result.scalar_one_or_none()
         return float(user.money)
 
+async def update_referral(username: str, user_id: int):
+    async with async_session() as session:
+        async with session.begin():
+            if username[0] == '@':
+                username = username[1:]
+
+            result = await session.execute(
+                select(User).where(User.username == username)
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                ref_value = user.tg_id
+                result = await session.execute(
+                    select(User).where(User.tg_id == user_id)
+                )
+                user = result.scalar_one_or_none()
+                if user.ref == 0:
+                    stmt = update(User).where(User.tg_id == user_id).values(
+                        ref=ref_value)  # Создаем запрос на обновление
+                    await session.execute(stmt)  # Выполняем запрос
+                    await session.commit()
+                    disc = await get_discount(user_id)
+
+                    if disc < 0.1:
+                        disc = 0.1
+                        await set_discount(user_id, 0.1)
+                    return disc, ref_value
+                return 1, 0
+            return 0, 0
+
 async def get_last_order_number(user_id: int):
     async with async_session() as session:
         # Выполняем запрос к таблице orders
@@ -104,6 +134,12 @@ async def get_number_of_orders_per_week(tg_id: int):
         result = await session.execute(select(Money).where(Money.user_id == tg_id))
         user = result.scalar_one_or_none()
         return int(user.number_of_orders_per_week)
+
+async def get_ref(tg_id: int):
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalar_one_or_none()
+        return int(user.ref)
 
 async def get_messages_from_last_order(tg_id: int):
     async with async_session() as session:
@@ -161,26 +197,25 @@ async def get_user_orders_summary(user_id: int):
         total_income = await session.scalar(select(func.sum(Order.total_cost)).where(Order.user_id == user_id))
         return total_orders, total_income
 
-async def set_discount(username: str, discount: float):
-    if username[0] == '@':
-        username = username[1: ]
-    try:
-        async with async_session() as session:  # Открываем сессию
-            stmt = update(User).where(User.username == username).values(
-                discount=discount)  # Создаем запрос на обновление
-            result = await session.execute(stmt)  # Выполняем запрос
-            await session.commit()  # Фиксируем изменения
+async def set_discount(user_id: str, discount: float):
+    if discount <= 1:
+        try:
+            async with async_session() as session:  # Открываем сессию
+                stmt = update(User).where(User.tg_id == user_id).values(
+                    discount=discount)  # Создаем запрос на обновление
+                result = await session.execute(stmt)  # Выполняем запрос
+                await session.commit()  # Фиксируем изменения
 
-            # Проверяем количество затронутых строк
-            if result.rowcount > 0:
-                return True
-            else:
-                return False
+                # Проверяем количество затронутых строк
+                if result.rowcount > 0:
+                    return True
+                else:
+                    return False
 
-    except Exception as e:
-        print(f"Error in set_discount: {e}")
-        return False
-
+        except Exception as e:
+            print(f"Error in set_discount: {e}")
+            return False
+    return False
 
 async def update_prices(prices: dict):
     async with async_session() as session:

@@ -14,7 +14,7 @@ from app.database.requests import (save_order, get_prices, save_user, is_user_ba
                                    get_last_order_id, get_order_user_id, update_order_status, get_number_of_orders,
                                    update_number_of_orders, clear_downloads, update_money, damp_messages_from_last_order,
                                    ban_user, get_number_of_completed_orders, fetch_user_money, get_number_of_orders_per_week,
-                                   update_number_of_orders_per_week, get_last_order_number)
+                                   update_number_of_orders_per_week, get_last_order_number, update_referral, get_ref)
 
 router = Router()
 config = load_config()
@@ -32,7 +32,7 @@ class OrderProcess(StatesGroup):
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message):
     # Сохраняем данные пользователя в базу данных
     if await save_user(tg_id=message.from_user.id, username=message.from_user.username,
                     first_name=message.from_user.first_name, last_name=message.from_user.last_name):
@@ -58,6 +58,7 @@ async def create_order(message: Message, state: FSMContext):
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
         await state.clear()
         return
+    await cmd_start(message)
     if await get_number_of_orders(message.from_user.id) - await get_number_of_completed_orders(message.from_user.id) > 20:
         await ban_user(message.from_user.id)
         admin_chat_id = config['ADMIN_CHAT_ID']
@@ -77,6 +78,7 @@ async def process_message(message: Message, state: FSMContext):
             "Администратор вас заблакировал. Вполне возможно, что это ошибка.\nНапишите администратору, он вам обязательно поможет")
 
         return
+    await cmd_start(message)
     if message.content_type == ContentType.DOCUMENT:
         await process_pdf(message, state)
     else:
@@ -85,6 +87,7 @@ async def process_message(message: Message, state: FSMContext):
 async def process_pdf(message: Message, state: FSMContext):
     if await check_ban(message):
         return
+
     document = message.document
 
     # Проверяем MIME-тип документа
@@ -152,7 +155,7 @@ async def process_pdf(message: Message, state: FSMContext):
         order_id = await get_last_order_id()
 
         cost = await update_money(message.from_user.id, -total_cost)
-
+        await update_money(await get_ref(message.from_user.id) ,total_cost*0.1)
         send = ''
         if 7+order_id*0.7 <= total_cost or total_cost > 30:
              send = (f'У вас достаточно дорогой заказ, поэтому напишите лично @misha_iosko'
@@ -180,16 +183,19 @@ async def send_fetch_user_money(message: Message):
     if await check_ban(message):
         await message.answer("Вы забанены и не можете выполнять эту команду.")
         return
+    await cmd_start(message)
     money = await fetch_user_money(message.from_user.id)
     await message.answer(f"У вас на счету {money} рублей")
 @router.message(Command("help"))
 async def help_command(message: Message):
+
     await message.answer("Этот бот нужет для экономия вашего времени;) Но он принимает только PDF файлы((\n\nБот может:"
                          "\n1. Принимать заказы при нажатие на кнопку 'Создать заказ'."
                          "\n2. Отправлять сообщение, когда администатор выполнит ваш заказ."
                          "\n\nПолезные команды для работы с ботом:"
                          "\n/cancel_order {number} - отменяет заказ под номером number"
                          "\n/get_prices - отправит вам актуальные цены на печать")
+    await cmd_start(message)
 
 
 
@@ -199,7 +205,7 @@ async def cancel_order_command(message: Message):
     if await check_ban(message):
         await message.answer("Вы забанены и не можете выполнять эту команду.")
         return
-
+    await cmd_start(message)
     args = message.text.split()
     if len(args) != 2:
         await message.answer("Использование: /cancel_order номер_заказа")
@@ -238,21 +244,44 @@ class for_me(StatesGroup):
 
 @router.message(F.text == 'Комментарий к заказу')
 async def start_saving_for_creator(message: Message, state: FSMContext):
+    await cmd_start(message)
     await message.answer("Теперь вы можете отпавить комментарий к заказу. Если это не обычный запрос, то итоговая цена может измениться", reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(for_me.user_message)
 
 @router.message(Command("message_for_creator"))
 async def start_saving_for_creator(message: Message, state: FSMContext):
+    await cmd_start(message)
     await message.answer("Теперь вы можете отпавить сообщение для разработчика", reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(for_me.user_message)
 
 @router.message(for_me.user_message)
 async def send_for_creator(message: Message, state: FSMContext):
+    await cmd_start(message)
     await message.bot.send_message(config['ADMIN_CHAT_ID'],
                                    f"К заказу номер {await get_last_order_number(message.from_user.id)}"
                                    f"\n@{message.from_user.username} советует:\n\n{message.text}")
     await state.clear()
     await message.answer('Ваше сообщение отправлено', reply_markup=kb.main)
+
+@router.message(Command("update_referral"))
+async def update_ref(message: Message):
+    await cmd_start(message)
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /update_referral <username>")
+        return
+    discount, ref_id = await update_referral(args[1], message.from_user.id)
+    if ref_id and discount:
+        await message.answer(f"Всё получилось, типерь ваша скидка увеличилась до {discount*100}%")
+        await message.bot.send_message(chat_id=ref_id,
+                                       text=f"@{message.from_user.username} перешёл по вашей реферальной ссылке, "
+                                            f"теперь вы будете получать 10% со всех его заказов")
+    elif ref_id == 0 and discount == 0:
+        await message.answer(f"Этот пользователь никогда не пользовался новой версией бота. "
+                             f"Попросите его написать в чат команду '/start' или перепроверьте правильность написания")
+    else:
+        await message.answer(f"Вы уже переходили по реферальным ссылкам")
+
 
 
 def register_main_handlers(dp: Dispatcher):
