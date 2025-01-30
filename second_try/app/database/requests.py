@@ -279,10 +279,11 @@ async def update_money(user_id: int, bill: float):
         await session.execute(stmt)
         await session.commit()
         if new >= 0:
-            return (f"Стоимость заказа: 0.00 рубелй. Сумма, равная стоимости вашего заказа ({round(abs(bill), 2)} рублей),"
-                    f" была cписана с вашего счёта. Ваш остаток: {round(new, 2)} рублей")
+            return (
+                f"Стоимость заказа: 0.00 рублей. Сумма, равная стоимости вашего заказа ({round(abs(bill), 2)} рублей),"
+                f" была cписана с вашего счёта. Ваш остаток: {round(new, 2)} рублей")
         elif round(was, 2) != 0:
-            return f"Стоимость заказа: {round(abs(bill), 2)}. Вам следует донести {round(abs(new), 2)} рублей"
+            return f"Стоимость заказа: {round(abs(bill), 2)}. Вам следует доплатить {round(abs(new), 2)} рублей"
         else:
             return f"Стоимость заказа: {round(abs(bill), 2)}"
 
@@ -421,7 +422,11 @@ async def get_order_user_id(order_id: int) -> int:
         result = await session.scalar(select(Order.user_id).where(Order.id == order_id))
         return result
 
+async def get_order_money(order_id: int) -> int:
+    async with async_session() as session:
+        result = await session.scalar(select(Order.total_cost).where(Order.id == order_id))
 
+        return float(result)
 async def update_order_status(order_id: int, status: str):
     async with async_session() as session:
         # Получаем текущий статус заказа
