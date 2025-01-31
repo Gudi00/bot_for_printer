@@ -38,7 +38,7 @@ class OrderProcess(StatesGroup):
 async def smth(message: Message):
     await help_command(message)
     await message.answer(
-        "Для начала оформления заказа нажмите на кнопку 'Создать заказ' внизу экрана"
+        "Для начала оформления заказа нажмите на кнопку 'Создать заказ' внизу экрана", reply_markup=kb.main
     )
 
     await cmd_start(message)
@@ -126,7 +126,7 @@ async def process_pdf(message: Message, state: FSMContext):
         num_pages = pdf_document.page_count
 
         if num_pages > 300:
-            await message.answer(f"В файле слишком много страниц. Отправьте его по отдельности (не более 300 страниц)")
+            await message.answer(f"В файле слишком много страниц. Отправьте его по отдельности (не более 300 страниц)", reply_markup=kb.main)
             await state.clear()
             return
 
@@ -198,7 +198,7 @@ async def process_pdf(message: Message, state: FSMContext):
 @router.message(Command("money"))
 async def send_fetch_user_money(message: Message):
     if await check_ban(message):
-        await message.answer("Вы забанены и не можете выполнять эту команду.")
+        await message.answer("Вы забанены и не можете выполнять эту команду.", reply_markup=kb.main)
         return
     await cmd_start(message)
     money = await fetch_user_money(message.from_user.id)
@@ -220,7 +220,7 @@ async def help_command(message: Message):
         "Вы получите скидку 10%, а ваш друг получит 10% с каждого вашего заказа.\n"
         "/message_for_creator — отправит ваше предложение по улучшению бота разработчику.\n"
         "/money — покажет количество средств на вашем счете."
-    )
+    , reply_markup=kb.main)
 
     await cmd_start(message)
 
@@ -238,7 +238,7 @@ async def cancel_order_command(message: Message):
     await cmd_start(message)
     args = message.text.split()
     if len(args) != 2:
-        await message.answer("Использование: /cancel_order номер_заказа")
+        await message.answer("Использование: /cancel_order номер_заказа", reply_markup=kb.main)
         return
 
     try:

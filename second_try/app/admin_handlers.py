@@ -2,6 +2,8 @@ import os
 from aiogram import Router, types, Bot, Dispatcher
 from aiogram.types import Message, InputFile, CallbackQuery
 from aiogram.filters import Command
+from aiogram.types import FSInputFile
+
 from app.database.requests import (
     get_orders_summary, get_user_orders_summary, set_discount, update_order_status,
     update_prices, get_prices_for_command, get_all_files, clear_downloads, get_order_user_id, ban_user, unban_user,
@@ -10,7 +12,7 @@ from app.database.requests import (
     update_number_of_completed_orders,
 )
 from app.config import load_config
-
+from io import BytesIO
 
 router = Router()
 config = load_config()
@@ -180,12 +182,14 @@ async def handle_reaction(message: Message):
         await update_number_of_messages_from_last_order(message.from_user.id)
 
         if await get_messages_from_last_order(message.from_user.id) % 3 == 2:
-            await message.answer(
-                'Чтобы создать заказ, нужно нажать на кнопку "Создать заказ" внизу экрана. '
+            caption = ('Чтобы создать заказ, нужно нажать на кнопку "Создать заказ" внизу экрана. '
                 'Иногда эта кнопка сворачивается и выглядит как квадрат с 4 точками рядом с кнопкой "Отправить сообщение". '
-                'Также можно написать "Создать заказ" (обязательно с большой буквы).\n\n'
-                'Если захотите узнать все возможности бота, то напишите /help'
-            )
+               '\n\n'
+                'Если захотите узнать все возможности бота, то напишите /help')
+            photo = FSInputFile("photo1.jpg")
+
+            await message.answer_photo(photo=photo, caption=caption)
+
         return
 
     bot_user = await bot.get_me()
