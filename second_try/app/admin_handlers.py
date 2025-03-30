@@ -133,7 +133,7 @@ async def handle_update_money_command(message: types.Message):
         # Парсинг команды /update_money user_id new_money_value
         command_args = message.text.split()
         if len(command_args) != 3:
-            await message.reply("Используйте команду в формате: /update_money <username> <new_money_value>")
+            await message.reply("Используйте команду в формате: /update_money <user_id> <new_money_value>")
             return
 
         user_id = int(command_args[1])
@@ -141,7 +141,7 @@ async def handle_update_money_command(message: types.Message):
 
         # Обновление значения money
         await update_money(user_id, new_money_value)
-        await message.reply(f"Значение money для пользователя с user_id {user_id} обновлено на {new_money_value}")
+        await message.reply(f"Значение money для пользователя с user_id {user_id} увеличено на  {new_money_value} рублей")
     except Exception as e:
         await message.reply(f"Произошла ошибка: {e}")
 
